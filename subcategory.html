@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>منتجات الفئة الفرعية - Tech Time</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://unpkg.com/aos@next/dist/aos.css"/>
+  <style>
+    body { font-family: 'Cairo', sans-serif; background:#222831; color:#EEEEEE; }
+    .glass { background: rgba(255,255,255,0.05); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.08); }
+    .product-card img { height: 200px; object-fit: cover; border-radius:0.5rem; }
+  </style>
+</head>
+<body class="min-h-screen">
+
+<!-- ===== استدعاء الناف بار ===== -->
+<div id="navbar"></div>
+
+
+<div class="pt-28 px-6 max-w-7xl mx-auto">
+
+  <!-- ===== عنوان الصفحة ===== -->
+  <h1 id="subCategoryTitle" class="text-3xl font-bold text-center text-[#00ADB5] mb-10" data-aos="fade-down">
+    منتجات الفئة الفرعية
+  </h1>
+
+  <!-- ===== مؤشر التحميل ===== -->
+  <div id="loading" class="text-center py-16">
+    <svg class="animate-spin h-8 w-8 text-[#00ADB5] mx-auto mb-2" viewBox="0 0 24 24">
+      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v8H4z"></path>
+    </svg>
+    <p>جاري تحميل المنتجات...</p>
+  </div>
+
+  <!-- ===== رسالة عدم وجود نتائج ===== -->
+  <div id="noResults" class="hidden text-center py-10 text-gray-400 text-lg">
+    لا توجد منتجات ضمن هذه الفئة الفرعية
+  </div>
+
+  <!-- ===== شبكة المنتجات ===== -->
+  <div id="productsGrid" class="grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6"></div>
+
+</div>
+
+<!-- ===== الفوتر ===== -->
+<div id="footer"></div>
+<script>fetch("footer.html").then(res=>res.text()).then(data=>document.getElementById("footer").innerHTML=data);</script>
+
+<!-- ===== Firebase + AOS ===== -->
+<script src="https://unpkg.com/aos@next/dist/aos.js"></script>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { getFirestore, collection, getDocs, addDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyAPRUZs1HHbucnnOdqOr280TjLH86qETnA",
+    authDomain: "techtimev3.firebaseapp.com",
+    projectId: "techtimev3",
+    storageBucket: "techtimev3.appspot.com",
+    messagingSenderId: "435597436729",
+    appId: "1:435597436729:web:2bd440942a6c0da8fb6ae8",
+    measurementId: "G-3984PMGWGH"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+
+  const urlParams = new URLSearchParams(window.location.search);
+  const subCategoryName = urlParams.get('name');
+
+  document.getElementById("subCategoryTitle").textContent = `منتجات الفئة الفرعية: ${subCategoryName}`;
+
+  const productsGrid = document.getElementById("productsGrid");
+  const loading = document.getElementById("loading");
+  const noResults = document.getElementById("noResults");
+
+  async function loadSubCategoryProducts(){
+    const snapshot = await getDocs(collection(db,"products"));
+    let found = false;
+    let delay = 0;
+
+    snapshot.forEach(doc => {
+      const p = doc.data();
+      if(p.subCategory === subCategoryName){
+        found = true;
+
+        const card = document.createElement("div");
+        card.className = "glass product-card p-4 rounded-xl hover:scale-105 transition";
+        card.setAttribute("data-aos","fade-up");
+        card.setAttribute("data-aos-delay", delay.toString());
+
+        card.innerHTML = `
+          <a href="product.html?name=${encodeURIComponent(p.name || '')}">
+            <img src="${p.mainImage || p.image || ''}" class="w-full mb-3 rounded">
+            <h3 class="font-bold mb-1">${p.name || ''}</h3>
+          </a>
+          <p class="text-gray-300 text-sm mb-1">${p.brand || ''}</p>
+          <p class="text-gray-400 text-xs mb-3">${p.category || ''} / ${p.subCategory || ''}</p>
+          <button class="add-to-cart bg-[#00ADB5] hover:bg-[#393E46] text-white py-2 rounded w-full text-sm font-bold">
+            أضف إلى السلة
+          </button>
+        `;
+
+        // زر إضافة للسلة
+        card.querySelector(".add-to-cart").addEventListener("click", async ()=>{
+          await addDoc(collection(db,"carts"),{
+            name: p.name,
+            image: p.mainImage || p.image || '',
+            brand: p.brand || '',
+            category: p.category || '',
+            subcategory: p.subCategory || '',
+            price: p.price || 0,
+            quantity: 1,
+            addedAt: new Date()
+          });
+          alert("✅ تمت إضافة المنتج إلى السلة!");
+        });
+
+        productsGrid.appendChild(card);
+        delay += 100;
+      }
+    });
+
+    loading.classList.add("hidden");
+    if(!found){
+      noResults.classList.remove("hidden");
+    }
+  }
+
+  loadSubCategoryProducts();
+  AOS.init({ duration: 700, once: true });
+</script>
+
+<script>
+  // 1️⃣ تحميل nav.html أولاً
+  fetch("nav.html").then(res => res.text()).then(data => {
+    document.getElementById("navbar").innerHTML = data;
+
+    // تحميل الفوتر
+    fetch("footer.html").then(res=>res.text()).then(d=>document.getElementById("footer").innerHTML=d);
+
+    // 2️⃣ بعد تركيب الناف بار نبدأ باستدعاء Firebase
+    importFirebaseAuth();
+  });
+
+  // 3️⃣ دالة استدعاء Firebase
+  async function importFirebaseAuth() {
+    const { initializeApp } = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js");
+    const { getAuth, onAuthStateChanged, signOut } = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js");
+    const { getFirestore, collection, onSnapshot } = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js");
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyAPRUZs1HHbucnnOdqOr280TjLH86qETnA",
+      authDomain: "techtimev3.firebaseapp.com",
+      projectId: "techtimev3",
+      storageBucket: "techtimev3.appspot.com",
+      messagingSenderId: "435597436729",
+      appId: "1:435597436729:web:2bd440942a6c0da8fb6ae8",
+      measurementId: "G-3984PMGWGH"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    // عناصر القائمة
+    const userName = document.getElementById("userName");
+    const loginOption = document.getElementById("loginOption");
+    const registerOption = document.getElementById("registerOption");
+    const ordersOption = document.getElementById("ordersOption");
+    const logoutBtn = document.getElementById("logoutBtn");
+    const cartCount = document.getElementById("cartCount");
+
+    // 🔹 التحقق من تسجيل الدخول
+    onAuthStateChanged(auth, user => {
+      if (user) {
+        userName.textContent = user.displayName || "حسابي";
+        loginOption.classList.add("hidden");
+        registerOption.classList.add("hidden");
+        ordersOption.classList.remove("hidden");
+        logoutBtn.classList.remove("hidden");
+      } else {
+        userName.textContent = "حسابي";
+        loginOption.classList.remove("hidden");
+        registerOption.classList.remove("hidden");
+        ordersOption.classList.add("hidden");
+        logoutBtn.classList.add("hidden");
+      }
+    });
+
+    // 🔹 تسجيل الخروج
+    logoutBtn.addEventListener("click", () => {
+      signOut(auth).then(() => window.location.href = "index.html");
+    });
+
+    // 🔹 تحديث عداد السلة مباشرة
+    if (cartCount) {
+      onSnapshot(collection(db, "carts"), (snapshot) => {
+        cartCount.textContent = snapshot.size;
+        cartCount.classList.toggle("hidden", snapshot.size === 0);
+      });
+    }
+  }
+</script>
+<script>
+  // دالة فتح وإغلاق السايد بار
+  function toggleSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('overlay');
+
+    if (sidebar) {
+      sidebar.classList.toggle('translate-x-full');
+    }
+    if (overlay) {
+      overlay.classList.toggle('invisible');
+      overlay.classList.toggle('opacity-0');
+    }
+  }
+</script>
+</body>
+</html>

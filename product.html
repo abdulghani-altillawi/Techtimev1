@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>تفاصيل المنتج - Tech Time</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://unpkg.com/aos@next/dist/aos.css"/>
+  <style>
+    body { font-family: 'Cairo', sans-serif; background:#222831; color:#EEEEEE; }
+    .glass { background: rgba(255,255,255,0.05); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.08); }
+    .color-option { text-align:center; cursor:pointer; transition: transform 0.2s; }
+    .color-option.selected { transform: scale(1.2); }
+    .color-dot { width: 35px; height: 35px; border-radius: 50%; border: 2px solid #fff; margin:auto; }
+    .color-option.selected .color-dot { border-color:#00ADB5; }
+    .product-image { max-width: 280px; max-height: 280px; object-fit: contain; margin: auto; display:block; transition: all 0.3s ease; }
+    .fade-out { opacity:0; transform: scale(0.95); }
+    .fade-in { opacity:1; transform: scale(1); }
+    .color-label { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); background:#00ADB5; color:white; font-size: 0.8rem; padding: 4px 10px; border-radius: 999px; }
+  </style>
+</head>
+<body class="min-h-screen">
+
+<!-- ===== الناف بار ===== -->
+<div id="navbar"></div>
+
+
+<section class="pt-28 px-4 max-w-5xl mx-auto">
+
+  <!-- ===== مؤشر التحميل ===== -->
+  <div id="loading" class="text-center py-16">
+    <svg class="animate-spin h-8 w-8 text-[#00ADB5] mx-auto mb-2" viewBox="0 0 24 24">
+      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v8H4z"></path>
+    </svg>
+    <p>جاري تحميل المنتج...</p>
+  </div>
+
+  <div id="productDetails" class="hidden glass p-6 rounded-2xl shadow-xl grid md:grid-cols-2 gap-8 items-center relative overflow-hidden" data-aos="zoom-in">
+    <!-- صورة المنتج -->
+    <div class="text-center relative">
+      <span id="colorNameLabel" class="color-label hidden"></span>
+      <img id="mainImage" src="" alt="صورة المنتج" class="product-image rounded mb-4 fade-in">
+      <div id="colorsContainer" class="flex justify-center gap-4 flex-wrap mt-4"></div>
+    </div>
+    <!-- تفاصيل المنتج -->
+    <div>
+      <h1 id="productName" class="text-3xl font-bold mb-2 text-[#00ADB5]"></h1>
+      <p id="productBrand" class="text-gray-400 text-lg mb-4"></p>
+      <p id="productDesc" class="text-gray-200 mb-4"></p>
+      <p id="productPrice" class="text-2xl font-bold text-[#00ADB5] mb-6"></p>
+      <button id="addToCart" class="bg-[#00ADB5] hover:bg-[#393E46] text-white px-6 py-3 rounded-lg font-bold w-full transition">
+        أضف إلى السلة
+      </button>
+    </div>
+  </div>
+
+</section>
+
+<!-- ===== Toast Notifications ===== -->
+<div id="toastContainer" class="fixed top-4 right-4 z-50 space-y-2"></div>
+
+<!-- ===== الفوتر ===== -->
+<div id="footer"></div>
+<script>fetch("footer.html").then(res=>res.text()).then(data=>document.getElementById("footer").innerHTML=data);</script>
+
+<script src="https://unpkg.com/aos@next/dist/aos.js"></script>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { getFirestore, collection, getDocs, addDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyAPRUZs1HHbucnnOdqOr280TjLH86qETnA",
+    authDomain: "techtimev3.firebaseapp.com",
+    projectId: "techtimev3",
+    storageBucket: "techtimev3.appspot.com",
+    messagingSenderId: "435597436729",
+    appId: "1:435597436729:web:2bd440942a6c0da8fb6ae8",
+    measurementId: "G-3984PMGWGH"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+
+  const loading = document.getElementById("loading");
+  const productDetails = document.getElementById("productDetails");
+
+  const mainImage = document.getElementById("mainImage");
+  const productName = document.getElementById("productName");
+  const productBrand = document.getElementById("productBrand");
+  const productDesc = document.getElementById("productDesc");
+  const productPrice = document.getElementById("productPrice");
+  const colorsContainer = document.getElementById("colorsContainer");
+  const addToCartBtn = document.getElementById("addToCart");
+  const colorNameLabel = document.getElementById("colorNameLabel");
+
+  const toastContainer = document.getElementById("toastContainer");
+  function showToast(message, type = 'success') {
+    const toast = document.createElement('div');
+    toast.className = `glass px-4 py-3 rounded-lg shadow-md cursor-pointer transition transform hover:scale-105 flex items-center gap-2 ${
+      type === 'success' ? 'border-green-500 text-green-400' : 'border-red-500 text-red-400'
+    }`;
+    toast.innerHTML = `<span>${type === 'success' ? '✅' : '⚠️'}</span> ${message}`;
+    toast.addEventListener('click', () => toast.remove());
+    toastContainer.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+  }
+
+  // قراءة اسم المنتج من الرابط
+  const urlParams = new URLSearchParams(window.location.search);
+  const productNameParam = urlParams.get('name');
+
+  let currentProduct = null;
+
+  async function loadProduct(){
+    const snapshot = await getDocs(collection(db,"products"));
+    snapshot.forEach(doc => {
+      const p = doc.data();
+      if(p.name && p.name === productNameParam){
+        currentProduct = p;
+
+        productName.textContent = p.name || '';
+        productBrand.textContent = p.brand || '';
+        productDesc.textContent = p.description || p.details || 'لا توجد تفاصيل';
+        productPrice.textContent = (p.price || p.productPrice || 0) + ' ل.س';
+        mainImage.src = p.mainImage || p.image || '';
+
+        // تحميل الألوان مع الأسماء
+        colorsContainer.innerHTML = '';
+        if(p.colors && Array.isArray(p.colors)){
+          p.colors.forEach((c,idx)=>{
+            const colorDiv = document.createElement('div');
+            colorDiv.className = 'color-option';
+            colorDiv.innerHTML = `
+              <div class="color-dot" style="background:${c.color || '#000'}"></div>
+              <p class="text-xs mt-1">${c.name || ''}</p>
+            `;
+            if(idx===0) {
+              colorDiv.classList.add('selected');
+              colorNameLabel.textContent = c.name || '';
+              colorNameLabel.classList.remove('hidden');
+            }
+            colorDiv.addEventListener('click', ()=>{
+              document.querySelectorAll('.color-option').forEach(dot=>dot.classList.remove('selected'));
+              colorDiv.classList.add('selected');
+
+              // تحديث اسم اللون
+              colorNameLabel.textContent = c.name || '';
+              colorNameLabel.classList.remove('hidden');
+
+              // أنيميشن تغيير الصورة
+              mainImage.classList.add('fade-out');
+              setTimeout(()=>{
+                if(c.image) mainImage.src = c.image;
+                mainImage.classList.remove('fade-out');
+                mainImage.classList.add('fade-in');
+                setTimeout(()=> mainImage.classList.remove('fade-in'), 300);
+              }, 200);
+            });
+            colorsContainer.appendChild(colorDiv);
+          });
+        }
+
+        loading.classList.add('hidden');
+        productDetails.classList.remove('hidden');
+      }
+    });
+  }
+
+  addToCartBtn.addEventListener('click', async ()=>{
+    if(!currentProduct) return;
+    await addDoc(collection(db,"carts"),{
+      name: currentProduct.name,
+      image: mainImage.src,
+      brand: currentProduct.brand || '',
+      category: currentProduct.category || '',
+      subCategory: currentProduct.subCategory || '',
+      price: currentProduct.price || currentProduct.productPrice || 0,
+      quantity: 1,
+      addedAt: new Date()
+    });
+    showToast("✅ تمت إضافة المنتج إلى السلة!");
+  });
+
+  loadProduct();
+  AOS.init({ duration: 700, once: true });
+</script>
+
+<script>
+  // 1️⃣ تحميل nav.html أولاً
+  fetch("nav.html").then(res => res.text()).then(data => {
+    document.getElementById("navbar").innerHTML = data;
+
+    // تحميل الفوتر
+    fetch("footer.html").then(res=>res.text()).then(d=>document.getElementById("footer").innerHTML=d);
+
+    // 2️⃣ بعد تركيب الناف بار نبدأ باستدعاء Firebase
+    importFirebaseAuth();
+  });
+
+  // 3️⃣ دالة استدعاء Firebase
+  async function importFirebaseAuth() {
+    const { initializeApp } = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js");
+    const { getAuth, onAuthStateChanged, signOut } = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js");
+    const { getFirestore, collection, onSnapshot } = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js");
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyAPRUZs1HHbucnnOdqOr280TjLH86qETnA",
+      authDomain: "techtimev3.firebaseapp.com",
+      projectId: "techtimev3",
+      storageBucket: "techtimev3.appspot.com",
+      messagingSenderId: "435597436729",
+      appId: "1:435597436729:web:2bd440942a6c0da8fb6ae8",
+      measurementId: "G-3984PMGWGH"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    // عناصر القائمة
+    const userName = document.getElementById("userName");
+    const loginOption = document.getElementById("loginOption");
+    const registerOption = document.getElementById("registerOption");
+    const ordersOption = document.getElementById("ordersOption");
+    const logoutBtn = document.getElementById("logoutBtn");
+    const cartCount = document.getElementById("cartCount");
+
+    // 🔹 التحقق من تسجيل الدخول
+    onAuthStateChanged(auth, user => {
+      if (user) {
+        userName.textContent = user.displayName || "حسابي";
+        loginOption.classList.add("hidden");
+        registerOption.classList.add("hidden");
+        ordersOption.classList.remove("hidden");
+        logoutBtn.classList.remove("hidden");
+      } else {
+        userName.textContent = "حسابي";
+        loginOption.classList.remove("hidden");
+        registerOption.classList.remove("hidden");
+        ordersOption.classList.add("hidden");
+        logoutBtn.classList.add("hidden");
+      }
+    });
+
+    // 🔹 تسجيل الخروج
+    logoutBtn.addEventListener("click", () => {
+      signOut(auth).then(() => window.location.href = "index.html");
+    });
+
+    // 🔹 تحديث عداد السلة مباشرة
+    if (cartCount) {
+      onSnapshot(collection(db, "carts"), (snapshot) => {
+        cartCount.textContent = snapshot.size;
+        cartCount.classList.toggle("hidden", snapshot.size === 0);
+      });
+    }
+  }
+</script>
+<script>
+  // دالة فتح وإغلاق السايد بار
+  function toggleSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('overlay');
+
+    if (sidebar) {
+      sidebar.classList.toggle('translate-x-full');
+    }
+    if (overlay) {
+      overlay.classList.toggle('invisible');
+      overlay.classList.toggle('opacity-0');
+    }
+  }
+</script>
+</body>
+</html>

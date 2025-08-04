@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>جميع المنتجات - Tech Time</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://unpkg.com/aos@next/dist/aos.css"/>
+  <style>
+    body { font-family: 'Cairo', sans-serif; background:#222831; color:#EEEEEE; }
+    .glass { background: rgba(255,255,255,0.05); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.08); }
+    .product-card img { 
+      height: 180px; 
+      object-fit: contain; 
+      border-radius: 0.5rem; 
+      background-color: transparent; /* خلفية شفافة */
+      padding: 5px;
+    }
+    select {
+      background: rgba(255,255,255,0.05);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255,255,255,0.15);
+      color: white;
+      padding: 6px 8px;
+      border-radius: 0.5rem;
+      outline: none;
+    }
+    option { color: black; }
+  </style>
+</head>
+<body class="min-h-screen">
+
+<!-- ===== الناف بار ===== -->
+<div id="navbar"></div>
+
+
+<div class="pt-28 px-4 max-w-7xl mx-auto">
+
+  <!-- ===== عنوان الصفحة ===== -->
+  <h1 class="text-3xl font-bold text-center text-[#00ADB5] mb-6" data-aos="fade-down">
+    جميع المنتجات
+  </h1>
+
+  <!-- ===== الفلاتر ===== -->
+  <div class="flex flex-wrap justify-center gap-4 mb-10" data-aos="fade-up">
+    <select id="filterCategory">
+      <option value="">كل الفئات</option>
+    </select>
+    <select id="filterSubCategory">
+      <option value="">كل الفئات الفرعية</option>
+    </select>
+    <select id="filterBrand">
+      <option value="">كل الماركات</option>
+    </select>
+  </div>
+
+  <!-- ===== مؤشر التحميل ===== -->
+  <div id="loading" class="text-center py-16">
+    <svg class="animate-spin h-8 w-8 text-[#00ADB5] mx-auto mb-2" viewBox="0 0 24 24">
+      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v8H4z"></path>
+    </svg>
+    <p>جاري تحميل المنتجات...</p>
+  </div>
+
+  <!-- ===== شبكة المنتجات ===== -->
+  <div id="productsGrid" class="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6"></div>
+
+</div>
+
+<!-- ===== Toast Notifications ===== -->
+<div id="toastContainer" class="fixed top-4 right-4 z-50 space-y-2"></div>
+
+<!-- ===== الفوتر ===== -->
+<div id="footer"></div>
+<script>fetch("footer.html").then(res=>res.text()).then(data=>document.getElementById("footer").innerHTML=data);</script>
+
+<!-- ===== Firebase + AOS ===== -->
+<script src="https://unpkg.com/aos@next/dist/aos.js"></script>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { getFirestore, collection, getDocs, addDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyAPRUZs1HHbucnnOdqOr280TjLH86qETnA",
+    authDomain: "techtimev3.firebaseapp.com",
+    projectId: "techtimev3",
+    storageBucket: "techtimev3.appspot.com",
+    messagingSenderId: "435597436729",
+    appId: "1:435597436729:web:2bd440942a6c0da8fb6ae8",
+    measurementId: "G-3984PMGWGH"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+
+  const productsGrid = document.getElementById("productsGrid");
+  const loading = document.getElementById("loading");
+  const filterCategory = document.getElementById("filterCategory");
+  const filterSubCategory = document.getElementById("filterSubCategory");
+  const filterBrand = document.getElementById("filterBrand");
+
+  let allProducts = [];
+
+  function showToast(message, type = 'success') {
+    const toastContainer = document.getElementById('toastContainer');
+    const toast = document.createElement('div');
+    toast.className = `glass px-4 py-3 rounded-lg shadow-md cursor-pointer transition transform hover:scale-105 ${
+      type === 'success' ? 'border-green-500 text-green-400' : 'border-red-500 text-red-400'
+    }`;
+    toast.textContent = message;
+    toast.addEventListener('click', () => toast.remove());
+    toastContainer.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+  }
+
+  async function loadProducts(){
+    const snapshot = await getDocs(collection(db,"products"));
+    allProducts = [];
+    snapshot.forEach(doc => allProducts.push(doc.data()));
+    loading.classList.add("hidden");
+    renderProducts();
+  }
+
+  async function loadFilters(){
+    const catsSnap = await getDocs(collection(db,"categories"));
+    catsSnap.forEach(doc => {
+      const c = doc.data();
+      filterCategory.innerHTML += `<option value="${c.name}">${c.name}</option>`;
+    });
+
+    const subSnap = await getDocs(collection(db,"subcategories"));
+    subSnap.forEach(doc => {
+      const s = doc.data();
+      filterSubCategory.innerHTML += `<option value="${s.name}">${s.name}</option>`;
+    });
+
+    const brandSnap = await getDocs(collection(db,"brands"));
+    brandSnap.forEach(doc => {
+      const b = doc.data();
+      filterBrand.innerHTML += `<option value="${b.name}">${b.name}</option>`;
+    });
+  }
+
+  function renderProducts(){
+    productsGrid.innerHTML = "";
+    let filtered = allProducts.filter(p=>{
+      return (!filterCategory.value || p.category === filterCategory.value) &&
+             (!filterSubCategory.value || p.subCategory === filterSubCategory.value) &&
+             (!filterBrand.value || p.brand === filterBrand.value);
+    });
+
+    if(filtered.length === 0){
+      productsGrid.innerHTML = `<p class="col-span-full text-center text-gray-400">لا توجد منتجات مطابقة</p>`;
+      return;
+    }
+
+    let delay = 0;
+    filtered.forEach(p=>{
+      const price = parseFloat((p.price || p.productPrice || "0").toString().replace(/[^\d.]/g,'')) || 0;
+      const card = document.createElement("div");
+      card.className = "glass product-card p-4 rounded-xl hover:scale-105 transition";
+      card.setAttribute("data-aos","fade-up");
+      card.setAttribute("data-aos-delay", delay.toString());
+
+      card.innerHTML = `
+        <a href="product.html?name=${encodeURIComponent(p.name || '')}">
+          <img src="${p.mainImage || p.image || ''}" class="w-full mb-3 rounded">
+          <h3 class="font-bold mb-1">${p.name || ''}</h3>
+        </a>
+        <p class="text-gray-300 text-sm mb-1">${p.brand || ''}</p>
+        <p class="text-[#00ADB5] font-bold mb-3">${price} ل.س</p>
+        <button class="bg-[#00ADB5] hover:bg-[#393E46] text-white py-2 rounded w-full text-sm font-bold add-to-cart">
+          أضف إلى السلة
+        </button>
+      `;
+
+      card.querySelector(".add-to-cart").addEventListener("click", async ()=>{
+        await addDoc(collection(db,"carts"),{
+          name: p.name,
+          image: p.mainImage || p.image || '',
+          brand: p.brand || '',
+          category: p.category || '',
+          subcategory: p.subCategory || '',
+          price: price,
+          quantity: 1,
+          addedAt: new Date()
+        });
+        showToast("✅ تمت إضافة المنتج إلى السلة!", "success");
+      });
+
+      productsGrid.appendChild(card);
+      delay += 100;
+    });
+  }
+
+  // عند تغيير أي فلتر
+  [filterCategory, filterSubCategory, filterBrand].forEach(select=>{
+    select.addEventListener("change", renderProducts);
+  });
+
+  loadProducts();
+  loadFilters();
+  AOS.init({ duration: 700, once: true });
+</script>
+
+<script>
+  // 1️⃣ تحميل nav.html أولاً
+  fetch("nav.html").then(res => res.text()).then(data => {
+    document.getElementById("navbar").innerHTML = data;
+
+    // تحميل الفوتر
+    fetch("footer.html").then(res=>res.text()).then(d=>document.getElementById("footer").innerHTML=d);
+
+    // 2️⃣ بعد تركيب الناف بار نبدأ باستدعاء Firebase
+    importFirebaseAuth();
+  });
+
+  // 3️⃣ دالة استدعاء Firebase
+  async function importFirebaseAuth() {
+    const { initializeApp } = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js");
+    const { getAuth, onAuthStateChanged, signOut } = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js");
+    const { getFirestore, collection, onSnapshot } = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js");
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyAPRUZs1HHbucnnOdqOr280TjLH86qETnA",
+      authDomain: "techtimev3.firebaseapp.com",
+      projectId: "techtimev3",
+      storageBucket: "techtimev3.appspot.com",
+      messagingSenderId: "435597436729",
+      appId: "1:435597436729:web:2bd440942a6c0da8fb6ae8",
+      measurementId: "G-3984PMGWGH"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    // عناصر القائمة
+    const userName = document.getElementById("userName");
+    const loginOption = document.getElementById("loginOption");
+    const registerOption = document.getElementById("registerOption");
+    const ordersOption = document.getElementById("ordersOption");
+    const logoutBtn = document.getElementById("logoutBtn");
+    const cartCount = document.getElementById("cartCount");
+
+    // 🔹 التحقق من تسجيل الدخول
+    onAuthStateChanged(auth, user => {
+      if (user) {
+        userName.textContent = user.displayName || "حسابي";
+        loginOption.classList.add("hidden");
+        registerOption.classList.add("hidden");
+        ordersOption.classList.remove("hidden");
+        logoutBtn.classList.remove("hidden");
+      } else {
+        userName.textContent = "حسابي";
+        loginOption.classList.remove("hidden");
+        registerOption.classList.remove("hidden");
+        ordersOption.classList.add("hidden");
+        logoutBtn.classList.add("hidden");
+      }
+    });
+
+    // 🔹 تسجيل الخروج
+    logoutBtn.addEventListener("click", () => {
+      signOut(auth).then(() => window.location.href = "index.html");
+    });
+
+    // 🔹 تحديث عداد السلة مباشرة
+    if (cartCount) {
+      onSnapshot(collection(db, "carts"), (snapshot) => {
+        cartCount.textContent = snapshot.size;
+        cartCount.classList.toggle("hidden", snapshot.size === 0);
+      });
+    }
+  }
+</script>
+<script>
+  // دالة فتح وإغلاق السايد بار
+  function toggleSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('overlay');
+
+    if (sidebar) {
+      sidebar.classList.toggle('translate-x-full');
+    }
+    if (overlay) {
+      overlay.classList.toggle('invisible');
+      overlay.classList.toggle('opacity-0');
+    }
+  }
+</script>
+</body>
+</html>
